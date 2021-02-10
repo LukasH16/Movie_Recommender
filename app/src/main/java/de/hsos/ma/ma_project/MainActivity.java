@@ -17,7 +17,10 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.ProgressBar;
+import android.widget.RatingBar;
 import android.widget.ScrollView;
 
 import com.google.gson.Gson;
@@ -53,19 +56,45 @@ import java.util.logging.Logger;
 
 public class MainActivity extends AppCompatActivity {
     int counterForInit = 0;
-    Button None;
-    Button Both;
-    ImageButton Image1;
-    ImageButton Image2;
-    ScrollView RecommendationView;
-    ConstraintLayout TestView;
+    private Button btnSubmit;
+    private RatingBar ratingBar;
+    private LinearLayout movieRateLayout;
+    private ListView listView;
+    private ProgressBar bar;
     boolean online = false;
-    FeedReaderContract.FeedReaderDbHelper dbHelper;
+    private FeedReaderContract.FeedReaderDbHelper dbHelper;
+
+    //Dummy Data
+    String[] titelArray = {"Octopus","Pig","Sheep","Rabbit","Snake","Spider" };
+
+    String[] genreArray = {
+            "8 tentacled monster",
+            "Delicious in rolls",
+            "Great for jumpers",
+            "Nice in a stew",
+            "Great for shoes",
+            "Scary."
+    };
+
+    Integer[] imageArray = {R.drawable.movie_image_placeholder,
+            R.drawable.movie_image_placeholder,
+            R.drawable.movie_image_placeholder,
+            R.drawable.movie_image_placeholder,
+            R.drawable.movie_image_placeholder,
+            R.drawable.movie_image_placeholder};
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        movieRateLayout = findViewById(R.id.movieRateLayout);
+
+        MovieListAdapter whatever = new MovieListAdapter(this, titelArray, genreArray, imageArray, titelArray, genreArray, titelArray);
+        listView = (ListView) findViewById(R.id.recommendationList);
+        listView.setAdapter(whatever);
+
+        bar = (ProgressBar) findViewById(R.id.progressBar);
 
         // Daten vom Server holen
         /*
@@ -91,43 +120,7 @@ public class MainActivity extends AppCompatActivity {
         cursor.close();
         */
 
-        //Funktionen an Buttons binden
-        None = findViewById(R.id.buttonNone);
-        Both = findViewById(R.id.buttonBoth);
-        Image1 = findViewById(R.id.imageButton1);
-        Image2 = findViewById(R.id.imageButton2);
-        RecommendationView = findViewById(R.id.recommendationView);
-        TestView = findViewById(R.id.testView);
-
-        ImageView Recommendation1 = findViewById(R.id.recommendation1);
-        ImageButton ImageButton1 = findViewById(R.id.imageButton1);
-        Recommendation1.setBackground(LoadImageFromWebOperations("https://lumiere-a.akamaihd.net/v1/images/image_a89e70e8.jpeg?region=0,0,540,810"));
-        ImageButton1.setForeground(LoadImageFromWebOperations("https://lumiere-a.akamaihd.net/v1/images/image_a89e70e8.jpeg?region=0,0,540,810"));
-
-
-        None.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                ChooseImage(0);
-            }
-        });
-
-        Both.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                ChooseImage(3);
-            }
-        });
-
-        Image1.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                ChooseImage(1);
-            }
-        });
-
-        Image2.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {
-                ChooseImage(2);
-            }
-        });
+        addListenerOnRatingButton();
     }
 
     @Override
@@ -147,35 +140,29 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public void ChooseImage(int x){
-        counterForInit += 2;
-        if(x == 1){
-            UpdateDB(dbHelper, null, 1);
-            //Review Wert für image1 auf 1 setzen
-        }else if(x == 2){
-            UpdateDB(dbHelper, null, 1);
-            //Review Wert für image2 auf 1 setzen
-        }else if(x == 3){
-            UpdateDB(dbHelper, null, 1);
-            UpdateDB(dbHelper, null, 1);
-            //Review Wert für beide auf 1 setzen
-        }
-        if(counterForInit>=20){
-            //Zu den Recommendations wechseln
-            //Asnyc Funktion losschicken
-            AsyncTaskRunner runner = new AsyncTaskRunner();
+    public void addListenerOnRatingButton() {
+        btnSubmit = (Button) findViewById(R.id.btnSubmit);
+        ratingBar = (RatingBar) findViewById(R.id.ratingBar);
 
-            //pass the measurement as params to the AsyncTask
-            //Hier müssen evtl. die Inputs übergeben werden
-            runner.execute();
+        //if click on me, then display the current rating value.
+        btnSubmit.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                counterForInit++;
+                bar.setVisibility(View.VISIBLE);
+                Log.i("Rating: ", String.valueOf((ratingBar.getRating() - 1) / 4));
+                //Daten in DB Updaten
+                //Daten per Post an Server
+                //Neuen Film laden
+                bar.setVisibility(View.GONE);
 
-            ProgressBar bar = (ProgressBar) findViewById(R.id.progressBar);
-            bar.setVisibility(View.VISIBLE);
+                if(counterForInit>=10){
+                    movieRateLayout.setVisibility(View.GONE);
+                    listView.setVisibility(View.VISIBLE);
+                }
+            }
 
-
-        }else{
-            //TODO: Bilder und jeweilige Namen aktualisiseren
-        }
+        });
 
     }
 
@@ -203,12 +190,9 @@ public class MainActivity extends AppCompatActivity {
                 //Hier müssen evtl. die Inputs übergeben werden
                 runner.execute();
 
-                ProgressBar bar = (ProgressBar) findViewById(R.id.progressBar);
                 bar.setVisibility(View.VISIBLE);
             }else{
                 online = true;
-                //TODO:Daten aus DB ziehen
-                //ReadFromDB(dbHelper, null);
 
                 //Server-Request losschicken
                 AsyncTaskRunnerPost postReq = new AsyncTaskRunnerPost();
@@ -216,13 +200,14 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         if (id == R.id.retry_favorites) {
-            //TODO:20 neue Filme aus der DB ziehen
+            //TODO:10 neue Filme aus der DB ziehen
             //ReadFromDB(dbHelper, null);
             //TODO:Die Imagebuttons füllen
             counterForInit = 0;
-            TestView.setVisibility(View.VISIBLE);
-            RecommendationView.setVisibility(View.INVISIBLE);
+            movieRateLayout.setVisibility(View.VISIBLE);
+            listView.setVisibility(View.GONE);
         }
+
         return super.onOptionsItemSelected(item);
     }
 
@@ -353,7 +338,6 @@ public class MainActivity extends AppCompatActivity {
         protected void onPreExecute() {
             super.onPreExecute();
 
-            ProgressBar bar = (ProgressBar) findViewById(R.id.progressBar);
             bar.setVisibility(View.INVISIBLE);
         }
 
@@ -477,8 +461,8 @@ public class MainActivity extends AppCompatActivity {
             super.onPostExecute(result);
 
             //Hide the progress bar now that we are finished
-            ProgressBar bar = (ProgressBar) findViewById(R.id.progressBar);
-            bar.setVisibility(View.INVISIBLE);
+            //ProgressBar bar = (ProgressBar) findViewById(R.id.progressBar);
+            //bar.setVisibility(View.INVISIBLE);
 
             //Retrieve the results
 
@@ -486,8 +470,8 @@ public class MainActivity extends AppCompatActivity {
 
 
             //Aktuelle View verstecken und Vorschläge zeigen
-            TestView.setVisibility(View.INVISIBLE);
-            RecommendationView.setVisibility(View.VISIBLE);
+            //TestView.setVisibility(View.INVISIBLE);
+            //RecommendationView.setVisibility(View.VISIBLE);
 
 
         }
@@ -495,11 +479,12 @@ public class MainActivity extends AppCompatActivity {
 
     public class MovieData {
         private String title;
-        private List<String> word2vec;
+        private List<String> doc2vec;
         private List<String> genre;
         private List<String> actor;
-        private Date releaseDate;
+        private int releaseDate;
         private String image;
+        private String plot;
 
         public String getTitle() {
             return title;
@@ -510,11 +495,11 @@ public class MainActivity extends AppCompatActivity {
         }
 
         public List<String> getWord2vec() {
-            return word2vec;
+            return doc2vec;
         }
 
         public void setWord2vec(List<String> word2vec) {
-            this.word2vec = word2vec;
+            this.doc2vec = word2vec;
         }
 
         public List<String> getGenre() {
@@ -533,11 +518,11 @@ public class MainActivity extends AppCompatActivity {
             this.actor = actor;
         }
 
-        public Date getReleaseDate() {
+        public int getReleaseDate() {
             return releaseDate;
         }
 
-        public void setReleaseDate(Date releaseDate) {
+        public void setReleaseDate(int releaseDate) {
             this.releaseDate = releaseDate;
         }
 
@@ -547,6 +532,14 @@ public class MainActivity extends AppCompatActivity {
 
         public void setImage(String image) {
             this.image = image;
+        }
+
+        public String getPlot() {
+            return plot;
+        }
+
+        public void setPlot(String plot) {
+            this.plot = plot;
         }
     }
 
