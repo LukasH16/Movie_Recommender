@@ -17,7 +17,7 @@ public final class FeedReaderContract {
     public static class FeedEntry implements BaseColumns {
         public static final String TABLE_NAME = "MovieData";
         public static final String COLUMN_NAME_TITLE = "title";
-        public static final String COLUMN_NAME_WORD2VEC = "word2vec";
+        public static final String COLUMN_NAME_DOC2VEC = "doc2vec";
         public static final String COLUMN_NAME_GENRE = "genre";
         public static final String COLUMN_NAME_ACTOR = "actor";
         public static final String COLUMN_NAME_RELEASE_DATE = "releaseDate";
@@ -28,7 +28,7 @@ public final class FeedReaderContract {
                 "CREATE TABLE " + FeedEntry.TABLE_NAME + " (" +
                         FeedEntry._ID + " INTEGER PRIMARY KEY," +
                         FeedEntry.COLUMN_NAME_TITLE + " TEXT," +
-                        FeedEntry.COLUMN_NAME_WORD2VEC + " TEXT," +
+                        FeedEntry.COLUMN_NAME_DOC2VEC + " TEXT," +
                         FeedEntry.COLUMN_NAME_GENRE + " TEXT," +
                         FeedEntry.COLUMN_NAME_ACTOR + " TEXT," +
                         FeedEntry.COLUMN_NAME_RELEASE_DATE + " TEXT," +

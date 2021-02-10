@@ -5,7 +5,10 @@ import androidx.constraintlayout.widget.ConstraintLayout;
 
 import android.content.ContentValues;
 import android.database.Cursor;
+import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -14,6 +17,7 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -22,7 +26,22 @@ import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.RatingBar;
 import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
 
+import com.android.volley.AuthFailureError;
+import com.android.volley.DefaultRetryPolicy;
+import com.android.volley.NetworkResponse;
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.VolleyLog;
+import com.android.volley.toolbox.HttpHeaderParser;
+import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.toolbox.JsonRequest;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
 import com.google.gson.Gson;
 
 import org.bytedeco.tesseract.INT_FEATURE_STRUCT;
@@ -31,6 +50,8 @@ import org.deeplearning4j.nn.conf.layers.DenseLayer;
 import org.deeplearning4j.nn.conf.layers.OutputLayer;
 import org.deeplearning4j.nn.multilayer.MultiLayerNetwork;
 import org.deeplearning4j.nn.weights.WeightInit;
+import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.nd4j.linalg.activations.Activation;
 import org.nd4j.linalg.api.ndarray.INDArray;
@@ -44,6 +65,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.ProtocolException;
@@ -56,13 +78,27 @@ import java.util.logging.Logger;
 
 public class MainActivity extends AppCompatActivity {
     int counterForInit = 0;
+    private TextView ratingTitle;
+    private TextView ratingGenre;
+    private TextView ratingActor;
+    private TextView ratingReleaseDate;
+    private TextView ratingPlot;
+    private ImageView ratingImage;
     private Button btnSubmit;
+    private TextView ratingID;
     private RatingBar ratingBar;
     private LinearLayout movieRateLayout;
     private ListView listView;
     private ProgressBar bar;
     boolean online = false;
     private FeedReaderContract.FeedReaderDbHelper dbHelper;
+    private DatabaseHelper mDBHelper;
+    private SQLiteDatabase mDb;
+    private RequestQueue queue;
+    private ArrayList<MovieData> Movies;
+
+    //https://stackoverflow.com/questions/39058638/android-volley-noconnectionerror
+    String url ="https://192.168.188.35:8000/";
 
     //Dummy Data
     String[] titelArray = {"Octopus","Pig","Sheep","Rabbit","Snake","Spider" };
@@ -83,6 +119,8 @@ public class MainActivity extends AppCompatActivity {
             R.drawable.movie_image_placeholder,
             R.drawable.movie_image_placeholder};
 
+    Integer[] idArray = {1,2,3,4,5,6};
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -90,36 +128,31 @@ public class MainActivity extends AppCompatActivity {
 
         movieRateLayout = findViewById(R.id.movieRateLayout);
 
-        MovieListAdapter whatever = new MovieListAdapter(this, titelArray, genreArray, imageArray, titelArray, genreArray, titelArray);
+        MovieListAdapter whatever = new MovieListAdapter(this, titelArray, genreArray, imageArray, titelArray, genreArray, titelArray, idArray);
         listView = (ListView) findViewById(R.id.recommendationList);
         listView.setAdapter(whatever);
 
         bar = (ProgressBar) findViewById(R.id.progressBar);
+        ratingTitle = (TextView) findViewById(R.id.movie_titel);
+        ratingActor = (TextView) findViewById(R.id.movie_actor);
+        ratingGenre = (TextView) findViewById(R.id.movie_genre);
+        ratingID = (TextView) findViewById(R.id.movie_id);
+        ratingImage = (ImageView) findViewById(R.id.movie_image);
+        ratingPlot = (TextView) findViewById(R.id.movie_plot);
+        ratingReleaseDate = (TextView) findViewById(R.id.movie_release_date);
 
-        // Daten vom Server holen
-        /*
-        String data = getJSON("UnsereURL");
-        MovieData msg = new Gson().fromJson(data, MovieData.class);
-        System.out.println(msg);
-         */
+        queue = Volley.newRequestQueue(this);
 
-        dbHelper = new FeedReaderContract.FeedReaderDbHelper(this);
+        //Log.i("Volley", "Bevor Get angefragt wird");
+        //VolleyGetDB();
 
-        //Daten von einem Film in DB speichern
-        WriteToDB(dbHelper, null);
+        //dbHelper = new FeedReaderContract.FeedReaderDbHelper(this);
 
-        // 20 Datensätze zur initialisierung bestimmen
-        /*
-        Cursor cursor = ReadFromDB(dbHelper, null);
-        List MovieTitles = new ArrayList<>();
-        while(cursor.moveToNext()) {
-            String MovieTitle = cursor.getString(
-                    cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry.COLUMN_NAME_TITLE));
-            MovieTitles.add(MovieTitle);
-        }
-        cursor.close();
-        */
+        mDBHelper = new DatabaseHelper(this);
 
+        Movies = getRandomDBEntries(mDBHelper);
+        fillMovieLayout(Movies.get(0));
+        Movies.remove(0);
         addListenerOnRatingButton();
     }
 
@@ -129,15 +162,14 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
-
-    public static Drawable LoadImageFromWebOperations(String url) {
-        try {
-            InputStream is = (InputStream) new URL(url).getContent();
-            Drawable d = Drawable.createFromStream(is, "src name");
-            return d;
-        } catch (Exception e) {
-            return null;
-        }
+    public void fillMovieLayout(MovieData movie){
+        ratingTitle.setText(movie.title);
+        ratingID.setText(String.valueOf(movie.id));
+        ratingPlot.setText(movie.plot);
+        ratingActor.setText(movie.actor);
+        ratingGenre.setText(movie.genre);
+        ratingReleaseDate.setText(String.valueOf(movie.releaseDate));
+        new DownloadImageTask(ratingImage).execute("https:" + movie.image);
     }
 
     public void addListenerOnRatingButton() {
@@ -148,15 +180,20 @@ public class MainActivity extends AppCompatActivity {
         btnSubmit.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                counterForInit++;
                 bar.setVisibility(View.VISIBLE);
+                float rating = ((ratingBar.getRating() - 1) / 4);
                 Log.i("Rating: ", String.valueOf((ratingBar.getRating() - 1) / 4));
                 //Daten in DB Updaten
+                updateMovieRating(Integer.parseInt(ratingID.getText().toString()), rating, 3);
                 //Daten per Post an Server
-                //Neuen Film laden
-                bar.setVisibility(View.GONE);
+                VolleyPostUpdate(ratingTitle.getText().toString(), Integer.valueOf(ratingReleaseDate.getText().toString()), "Action", rating);
 
-                if(counterForInit>=10){
+                if(!Movies.isEmpty()){
+                    //Neuen Film laden
+                    fillMovieLayout(Movies.get(0));
+                    Movies.remove(0);
+                    bar.setVisibility(View.GONE);
+                }else{
                     movieRateLayout.setVisibility(View.GONE);
                     listView.setVisibility(View.VISIBLE);
                 }
@@ -166,7 +203,6 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    // create an action bar button
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // R.menu.mymenu is a reference to an xml file named mymenu.xml which should be inside your res/menu directory.
@@ -174,8 +210,6 @@ public class MainActivity extends AppCompatActivity {
         getMenuInflater().inflate(R.menu.action_bar, menu);
         return super.onCreateOptionsMenu(menu);
     }
-
-    // handle button activities
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
@@ -211,58 +245,13 @@ public class MainActivity extends AppCompatActivity {
         return super.onOptionsItemSelected(item);
     }
 
-    public String getJSON(String url, int timeout) {
-        HttpURLConnection c = null;
-        try {
-            URL u = new URL(url);
-            c = (HttpURLConnection) u.openConnection();
-            c.setRequestMethod("GET");
-            c.setRequestProperty("Content-length", "0");
-            c.setUseCaches(false);
-            c.setAllowUserInteraction(false);
-            c.setConnectTimeout(timeout);
-            c.setReadTimeout(timeout);
-            c.connect();
-            int status = c.getResponseCode();
-
-            switch (status) {
-                case 200:
-                case 201:
-                    BufferedReader br = new BufferedReader(new InputStreamReader(c.getInputStream()));
-                    StringBuilder sb = new StringBuilder();
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        sb.append(line+"\n");
-                    }
-                    br.close();
-                    return sb.toString();
-            }
-
-        } catch (MalformedURLException ex) {
-            Logger.getLogger(getClass().getName()).log(Level.SEVERE, null, ex);
-        } catch (IOException ex) {
-            Logger.getLogger(getClass().getName()).log(Level.SEVERE, null, ex);
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (c != null) {
-                try {
-                    c.disconnect();
-                } catch (Exception ex) {
-                    Logger.getLogger(getClass().getName()).log(Level.SEVERE, null, ex);
-                }
-            }
-        }
-        return null;
-    }
-
     public long WriteToDB(FeedReaderContract.FeedReaderDbHelper dbHelper, MovieData movie){
         // Gets the data repository in write mode
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         // Create a new map of values, where column names are the keys
         ContentValues values = new ContentValues();
         values.put(FeedReaderContract.FeedEntry.COLUMN_NAME_TITLE, "");
-        values.put(FeedReaderContract.FeedEntry.COLUMN_NAME_WORD2VEC, "");
+        values.put(FeedReaderContract.FeedEntry.COLUMN_NAME_DOC2VEC, "");
         values.put(FeedReaderContract.FeedEntry.COLUMN_NAME_GENRE, "");
         values.put(FeedReaderContract.FeedEntry.COLUMN_NAME_ACTOR, "");
         values.put(FeedReaderContract.FeedEntry.COLUMN_NAME_RELEASE_DATE, "");
@@ -282,7 +271,7 @@ public class MainActivity extends AppCompatActivity {
         String[] projection = {
                 BaseColumns._ID,
                 FeedReaderContract.FeedEntry.COLUMN_NAME_TITLE,
-                FeedReaderContract.FeedEntry.COLUMN_NAME_WORD2VEC,
+                FeedReaderContract.FeedEntry.COLUMN_NAME_DOC2VEC,
                 FeedReaderContract.FeedEntry.COLUMN_NAME_GENRE,
                 FeedReaderContract.FeedEntry.COLUMN_NAME_ACTOR,
                 FeedReaderContract.FeedEntry.COLUMN_NAME_RELEASE_DATE,
@@ -479,12 +468,23 @@ public class MainActivity extends AppCompatActivity {
 
     public class MovieData {
         private String title;
-        private List<String> doc2vec;
-        private List<String> genre;
-        private List<String> actor;
+        private String doc2vec;
+        private String genre;
+        private String actor;
         private int releaseDate;
         private String image;
         private String plot;
+        private int id;
+
+        MovieData(String title, String plot, int releaseDate, String image, String actor, String genre, int id){
+            this.title = title;
+            this.plot = plot;
+            this.releaseDate = releaseDate;
+            this.image = image;
+            this.actor = actor;
+            this.genre = genre;
+            this.id = id;
+        }
 
         public String getTitle() {
             return title;
@@ -494,27 +494,27 @@ public class MainActivity extends AppCompatActivity {
             this.title = title;
         }
 
-        public List<String> getWord2vec() {
+        public String getDoc2vec() {
             return doc2vec;
         }
 
-        public void setWord2vec(List<String> word2vec) {
-            this.doc2vec = word2vec;
+        public void setDoc2vec(String doc2vec) {
+            this.doc2vec = doc2vec;
         }
 
-        public List<String> getGenre() {
+        public String getGenre() {
             return genre;
         }
 
-        public void setGenre(List<String> genre) {
+        public void setGenre(String genre) {
             this.genre = genre;
         }
 
-        public List<String> getActor() {
+        public String getActor() {
             return actor;
         }
 
-        public void setActor(List<String> actor) {
+        public void setActor(String actor) {
             this.actor = actor;
         }
 
@@ -585,6 +585,207 @@ public class MainActivity extends AppCompatActivity {
         @Override
         protected void onProgressUpdate(String... values) {
             super.onProgressUpdate(values);
+        }
+    }
+
+    private class DownloadImageTask extends AsyncTask<String, Void, Bitmap> {
+        ImageView bmImage;
+
+        public DownloadImageTask(ImageView bmImage) {
+            this.bmImage = bmImage;
+        }
+
+        protected Bitmap doInBackground(String... urls) {
+            String urldisplay = urls[0];
+            Bitmap mIcon11 = null;
+            try {
+                InputStream in = new java.net.URL(urldisplay).openStream();
+                mIcon11 = BitmapFactory.decodeStream(in);
+            } catch (Exception e) {
+                Log.e("Error", e.getMessage());
+                e.printStackTrace();
+            }
+            return mIcon11;
+        }
+
+        protected void onPostExecute(Bitmap result) {
+            bmImage.setImageBitmap(result);
+        }
+    }
+
+    public void VolleyGetDB(){
+        url = url + "api/all_films";
+        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest
+                (Request.Method.GET, url, null, new Response.Listener<JSONObject>() {
+
+                    @Override
+                    public void onResponse(JSONObject response) {
+                        Log.i("Volley", "Response: " + response.toString());
+                    }
+                }, new Response.ErrorListener() {
+
+                    @Override
+                    public void onErrorResponse(VolleyError error) {
+                        // TODO: Handle error
+                        Log.e("Volley", "Fehler in Get request");
+                        Log.e("Volley", error.toString());
+                    }
+                });
+
+        // Access the RequestQueue through your singleton class.
+        queue.add(jsonObjectRequest);
+
+    }
+
+    public void VolleyPostUpdate(String title, int year, String username, float rating){
+        try {
+            //TODO: Irgendwie den Server erreichen
+            String URL = url + "api/post_rating";
+            Log.i("Post", URL);
+            JSONObject jsonBody = new JSONObject();
+            jsonBody.put("title", title);
+            jsonBody.put("year", year);
+            jsonBody.put("username", username);
+            jsonBody.put("rating", rating);
+            //final String requestBody = jsonBody.toString();
+
+            JsonObjectRequest req = new JsonObjectRequest(URL, jsonBody,
+                    new Response.Listener<JSONObject>() {
+                        @Override
+                        public void onResponse(JSONObject response) {
+                            try {
+                                VolleyLog.v("Response:%n %s", response.toString(4));
+                            } catch (JSONException e) {
+                                e.printStackTrace();
+                                Log.e("Volley", "Im onResponse");
+                            }
+                        }
+                    }, new Response.ErrorListener() {
+                @Override
+                public void onErrorResponse(VolleyError error) {
+                    NetworkResponse response = error.networkResponse;
+                    String errorMsg = "";
+                    if(response != null && response.data != null) {
+                        String errorString = new String(response.data);
+                        Log.i("log error", errorString);
+                    }
+                    Log.e("Volley", "Im onErrorResponse");
+                }
+            });
+
+            // Add the realibility on the connection.
+            req.setRetryPolicy(new DefaultRetryPolicy(10000, 1, 1.0f));
+
+            queue.add(req);
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public ArrayList<MovieData> getRandomDBEntries(DatabaseHelper mDBHelper){
+        try {
+            mDBHelper.updateDataBase();
+        } catch (IOException mIOException) {
+            throw new Error("UnableToUpdateDatabase");
+        }
+
+        try {
+            mDb = mDBHelper.getWritableDatabase();
+        } catch (SQLException mSQLException) {
+            throw mSQLException;
+        }
+
+        Log.i("Movies", "Vor dem DB Zugriff");
+
+        final String MY_QUERY = "Select api_film.id, title, release_year, doc_vec, link_to_picture, short, api_actor.name AS actor, api_genre.name AS genre \n" +
+                "From api_film\n" +
+                "join api_film_actors on api_film.id = api_film_actors.film_id\n" +
+                "join api_actor on api_film_actors.actor_id = api_actor.id\n" +
+                "join api_film_genre on api_film.id = api_film_genre.film_id\n" +
+                "join api_genre on api_film_genre.genre_id = api_genre.id\n" +
+                "group by title\n" +
+                "order by RANDOM() LIMIT 10";
+
+        Cursor cursor = this.mDb.rawQuery(MY_QUERY, null);
+
+        // To increase performance first get the index of each column in the cursor
+        final int idIndex = cursor.getColumnIndex("id");
+        final int titleIndex = cursor.getColumnIndex("title");
+        final int release_yearIndex = cursor.getColumnIndex("release_year");
+        final int shortIndex = cursor.getColumnIndex("short");
+        final int link_to_pictureIndex = cursor.getColumnIndex("link_to_picture");
+        final int actorIndex = cursor.getColumnIndex("actor");
+        final int genreIndex = cursor.getColumnIndex("genre");
+
+        try {
+            // If moveToFirst() returns false then cursor is empty
+            if (!cursor.moveToFirst()) {
+                return new ArrayList<MovieData>();
+            }
+
+            final ArrayList<MovieData> Movies = new ArrayList<>();
+
+            do {
+                // Read the values of a row in the table using the indexes acquired above
+                final int id = cursor.getInt(idIndex);
+                final String title = cursor.getString(titleIndex);
+                final int release_year = cursor.getInt(release_yearIndex);
+                final String mshort = cursor.getString(shortIndex);
+                final String link_to_picture = cursor.getString(link_to_pictureIndex);
+                final String actor = cursor.getString(actorIndex);
+                final String genre = cursor.getString(genreIndex);
+
+                Movies.add(new MovieData(title, mshort, release_year, link_to_picture, actor, genre, id));
+
+            } while (cursor.moveToNext());
+
+            return Movies;
+        }finally {
+            // Don't forget to close the Cursor once you are done to avoid memory leaks.
+            // Using a try/finally like in this example is usually the best way to handle this
+            cursor.close();
+
+            // close the database
+            mDb.close();
+        }
+    }
+
+    public void updateMovieRating(int movie_id, float rating, int user_id) {
+        try {
+            mDBHelper.updateDataBase();
+        } catch (IOException mIOException) {
+            throw new Error("UnableToUpdateDatabase");
+        }
+
+        try {
+            mDb = mDBHelper.getWritableDatabase();
+        } catch (SQLException mSQLException) {
+            throw mSQLException;
+        }
+
+        ContentValues contentValues = new ContentValues();
+        contentValues.put("film_id", movie_id);
+        contentValues.put("user_id", user_id);
+        contentValues.put("rating", rating);
+        if(this.mDb.update("api_rating", contentValues, "film_id = " + movie_id + " AND user_id = " + user_id, null) == 0){
+            Log.i("Rating", "Noch kein Rating vorhanden");
+            this.mDb.insert("api_rating", null, contentValues);
+        }
+
+        // close the database
+        mDb.close();
+    }
+
+    public void parseVolleyError(VolleyError error) {
+        try {
+            String responseBody = new String(error.networkResponse.data, "utf-8");
+            JSONObject data = new JSONObject(responseBody);
+            JSONArray errors = data.getJSONArray("errors");
+            JSONObject jsonMessage = errors.getJSONObject(0);
+            String message = jsonMessage.getString("message");
+            Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
+        } catch (JSONException e) {
+        } catch (UnsupportedEncodingException errorr) {
         }
     }
 }

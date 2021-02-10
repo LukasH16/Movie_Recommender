@@ -9,9 +9,15 @@
     tools:context=".MainActivity"
     android:orientation="vertical">
 
-    <!-- Here is the inserted layout -->
-    <include layout="@layout/movie_layout"
-        android:id="@+id/movieRateLayout"/>
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <!-- Here is the inserted layout -->
+        <include layout="@layout/movie_layout"
+            android:id="@+id/movieRateLayout"/>
+
+    </ScrollView>
 
     <ProgressBar
         android:layout_width="match_parent"

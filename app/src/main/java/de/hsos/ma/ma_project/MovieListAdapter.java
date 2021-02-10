@@ -18,6 +18,9 @@ public class MovieListAdapter extends ArrayAdapter {
     //to store the animal images
     private final Integer[] imageIDarray;
 
+    //to store the animal images
+    private final Integer[] idArray;
+
     //to store the list of countries
     private final String[] titelArray;
 
@@ -35,7 +38,7 @@ public class MovieListAdapter extends ArrayAdapter {
 
     public MovieListAdapter(Activity context, String[] titelArrayParam, String[] genreArrayParam,
                              Integer[] imageIDArrayParam, String[] actorArrayParam,
-                             String[] plotArrayParam, String[] releaseDateArrayParam){
+                             String[] plotArrayParam, String[] releaseDateArrayParam, Integer[] idArray){
 
         super(context,R.layout.movie_layout , titelArrayParam);
 
@@ -46,6 +49,7 @@ public class MovieListAdapter extends ArrayAdapter {
         this.actorArray = actorArrayParam;
         this.plotArray = plotArrayParam;
         this.releaseDateArray = releaseDateArrayParam;
+        this.idArray = idArray;
 
     }
 
@@ -59,6 +63,7 @@ public class MovieListAdapter extends ArrayAdapter {
         TextView actorTextField = (TextView) rowView.findViewById(R.id.movie_actor);
         TextView plotTextField = (TextView) rowView.findViewById(R.id.movie_plot);
         TextView releaseDateTextField = (TextView) rowView.findViewById(R.id.movie_release_date);
+        TextView idTextField = (TextView) rowView.findViewById(R.id.movie_id);
         ImageView imageView = (ImageView) rowView.findViewById(R.id.movie_image);
         Button btnSubmit = (Button) rowView.findViewById(R.id.btnSubmit);
         RatingBar ratingBar = (RatingBar) rowView.findViewById(R.id.ratingBar);
@@ -69,6 +74,7 @@ public class MovieListAdapter extends ArrayAdapter {
         actorTextField.setText(actorArray[position]);
         plotTextField.setText(plotArray[position]);
         releaseDateTextField.setText(releaseDateArray[position]);
+        idTextField.setText(String.valueOf(idArray[position]));
         imageView.setImageResource(imageIDarray[position]);
 
         btnSubmit.setOnClickListener(new View.OnClickListener(){
