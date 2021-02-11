@@ -38,6 +38,7 @@ import com.android.volley.Response;
 import com.android.volley.VolleyError;
 import com.android.volley.VolleyLog;
 import com.android.volley.toolbox.HttpHeaderParser;
+import com.android.volley.toolbox.JsonArrayRequest;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.JsonRequest;
 import com.android.volley.toolbox.StringRequest;
@@ -98,7 +99,7 @@ public class MainActivity extends AppCompatActivity {
     private ArrayList<MovieData> Movies;
 
     //https://stackoverflow.com/questions/39058638/android-volley-noconnectionerror
-    String url ="https://192.168.188.35:8000/";
+    String url ="http://192.168.178.32:8000/";
 
     //Dummy Data
     String[] titelArray = {"Octopus","Pig","Sheep","Rabbit","Snake","Spider" };
@@ -142,6 +143,8 @@ public class MainActivity extends AppCompatActivity {
         ratingReleaseDate = (TextView) findViewById(R.id.movie_release_date);
 
         queue = Volley.newRequestQueue(this);
+
+        VolleyGetDB();
 
         //Log.i("Volley", "Bevor Get angefragt wird");
         //VolleyGetDB();
@@ -614,12 +617,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void VolleyGetDB(){
-        url = url + "api/all_films";
-        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest
-                (Request.Method.GET, url, null, new Response.Listener<JSONObject>() {
+        url = url + "api/all_films/0";
+        JsonArrayRequest jsonArrayRequest = new JsonArrayRequest
+                (Request.Method.GET, url, null, new Response.Listener<JSONArray>() {
 
                     @Override
-                    public void onResponse(JSONObject response) {
+                    public void onResponse(JSONArray response) {
                         Log.i("Volley", "Response: " + response.toString());
                     }
                 }, new Response.ErrorListener() {
@@ -633,7 +636,7 @@ public class MainActivity extends AppCompatActivity {
                 });
 
         // Access the RequestQueue through your singleton class.
-        queue.add(jsonObjectRequest);
+        queue.add(jsonArrayRequest);
 
     }
 
