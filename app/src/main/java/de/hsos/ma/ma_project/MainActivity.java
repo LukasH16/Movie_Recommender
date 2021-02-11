@@ -99,6 +99,8 @@ public class MainActivity extends AppCompatActivity {
     private SQLiteDatabase mDb;
     private RequestQueue queue;
     private ArrayList<MovieData> Movies;
+    private ArrayList<String> Actors;
+    private ArrayList<String> Genres;
     private int maxBatches = 5;
 
     //https://stackoverflow.com/questions/39058638/android-volley-noconnectionerror
@@ -149,11 +151,15 @@ public class MainActivity extends AppCompatActivity {
 
         queue = Volley.newRequestQueue(this);
         Movies = new ArrayList<>();
+        Actors = new ArrayList<>();
+        Genres = new ArrayList<>();
 
         dbHelper = new FeedReaderContract.FeedReaderDbHelper(this);
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         dbHelper.onUpgrade(db, 0, 1);
         VolleyGetDB();
+        VolleyGetActors();
+        VolleyGetGenres();
 
         addListenerOnRatingButton();
     }
@@ -562,6 +568,67 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    public void VolleyGetActors(){
+        String urlGet = url + "api/actors";
+
+        JsonArrayRequest jsonArrayRequest = new JsonArrayRequest
+                (Request.Method.GET, urlGet, null, new Response.Listener<JSONArray>() {
+
+
+                    @Override
+                    public void onResponse(JSONArray response) {
+                        Log.i("Actors Transmitted", response.toString());
+                        for (int i = 0; i<response.length(); i++) {
+                            try {
+                                Actors.add(response.getString(i));
+                            } catch (JSONException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                        Log.i("Actors Transmitted", Actors.toString());
+                    }
+                }, new Response.ErrorListener() {
+
+                    @Override
+                    public void onErrorResponse(VolleyError error) {
+                        Log.e("Actor Error", error.toString());
+
+                    }
+                });
+
+        queue.add(jsonArrayRequest);
+
+    }
+
+    public void VolleyGetGenres(){
+        String urlGet = url + "api/genres";
+
+        JsonArrayRequest jsonArrayRequest = new JsonArrayRequest
+                (Request.Method.GET, urlGet, null, new Response.Listener<JSONArray>() {
+                    @Override
+                    public void onResponse(JSONArray response) {
+                        Log.i("Genres Transmitted", response.toString());
+                        for (int i = 0; i<response.length(); i++) {
+                            try {
+                                Genres.add(response.getString(i));
+                            } catch (JSONException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                        Log.i("Genres Transmitted", Genres.toString());
+                    }
+                }, new Response.ErrorListener() {
+                    @Override
+                    public void onErrorResponse(VolleyError error) {
+                        Log.e("Genre Error", error.toString());
+
+                    }
+                });
+
+        queue.add(jsonArrayRequest);
+
+    }
+
     public void VolleyGetDB(){
         String urlGet = url + "api/all_films/0";
         JsonArrayRequest jsonArrayRequest = new JsonArrayRequest
@@ -586,6 +653,7 @@ public class MainActivity extends AppCompatActivity {
                             Log.i("Layout", String.valueOf(Movies.size()));
                             fillMovieLayout(Movies.get(0));
                             Movies.remove(0);
+                            Log.i("Volley", response.toString());
                             Log.i("Volley", String.valueOf(linesAdded) + " lines added");
                         } catch (JSONException e) {
                             e.printStackTrace();
