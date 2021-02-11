@@ -9,6 +9,7 @@ import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Movie;
 import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -44,6 +45,7 @@ import com.android.volley.toolbox.JsonRequest;
 import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 
 import org.bytedeco.tesseract.INT_FEATURE_STRUCT;
 import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
@@ -97,9 +99,12 @@ public class MainActivity extends AppCompatActivity {
     private SQLiteDatabase mDb;
     private RequestQueue queue;
     private ArrayList<MovieData> Movies;
+    private int maxBatches = 5;
 
     //https://stackoverflow.com/questions/39058638/android-volley-noconnectionerror
-    String url ="http://192.168.178.32:8000/";
+    //192.168.188.35
+    //192.168.178.32
+    String url ="http://192.168.188.35:8000/";
 
     //Dummy Data
     String[] titelArray = {"Octopus","Pig","Sheep","Rabbit","Snake","Spider" };
@@ -143,19 +148,13 @@ public class MainActivity extends AppCompatActivity {
         ratingReleaseDate = (TextView) findViewById(R.id.movie_release_date);
 
         queue = Volley.newRequestQueue(this);
+        Movies = new ArrayList<>();
 
+        dbHelper = new FeedReaderContract.FeedReaderDbHelper(this);
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        dbHelper.onUpgrade(db, 0, 1);
         VolleyGetDB();
 
-        //Log.i("Volley", "Bevor Get angefragt wird");
-        //VolleyGetDB();
-
-        //dbHelper = new FeedReaderContract.FeedReaderDbHelper(this);
-
-        mDBHelper = new DatabaseHelper(this);
-
-        Movies = getRandomDBEntries(mDBHelper);
-        fillMovieLayout(Movies.get(0));
-        Movies.remove(0);
         addListenerOnRatingButton();
     }
 
@@ -187,7 +186,8 @@ public class MainActivity extends AppCompatActivity {
                 float rating = ((ratingBar.getRating() - 1) / 4);
                 Log.i("Rating: ", String.valueOf((ratingBar.getRating() - 1) / 4));
                 //Daten in DB Updaten
-                updateMovieRating(Integer.parseInt(ratingID.getText().toString()), rating, 3);
+                int changedLines = dbHelper.UpdateDB(dbHelper, ratingTitle.getText().toString(), rating);
+                Log.i("Update", String.valueOf(changedLines));
                 //Daten per Post an Server
                 VolleyPostUpdate(ratingTitle.getText().toString(), Integer.valueOf(ratingReleaseDate.getText().toString()), "Action", rating);
 
@@ -199,13 +199,13 @@ public class MainActivity extends AppCompatActivity {
                 }else{
                     movieRateLayout.setVisibility(View.GONE);
                     listView.setVisibility(View.VISIBLE);
+                    bar.setVisibility(View.GONE);
                 }
             }
 
         });
 
     }
-
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         // R.menu.mymenu is a reference to an xml file named mymenu.xml which should be inside your res/menu directory.
@@ -246,81 +246,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         return super.onOptionsItemSelected(item);
-    }
-
-    public long WriteToDB(FeedReaderContract.FeedReaderDbHelper dbHelper, MovieData movie){
-        // Gets the data repository in write mode
-        SQLiteDatabase db = dbHelper.getWritableDatabase();
-        // Create a new map of values, where column names are the keys
-        ContentValues values = new ContentValues();
-        values.put(FeedReaderContract.FeedEntry.COLUMN_NAME_TITLE, "");
-        values.put(FeedReaderContract.FeedEntry.COLUMN_NAME_DOC2VEC, "");
-        values.put(FeedReaderContract.FeedEntry.COLUMN_NAME_GENRE, "");
-        values.put(FeedReaderContract.FeedEntry.COLUMN_NAME_ACTOR, "");
-        values.put(FeedReaderContract.FeedEntry.COLUMN_NAME_RELEASE_DATE, "");
-        values.put(FeedReaderContract.FeedEntry.COLUMN_NAME_IMAGE, "");
-        values.put(FeedReaderContract.FeedEntry.COLUMN_NAME_RATING, "");
-
-        // Insert the new row, returning the primary key value of the new row
-        long newRowId = db.insert(FeedReaderContract.FeedEntry.TABLE_NAME, null, values);
-        return newRowId;
-    }
-
-    public Cursor ReadFromDB(FeedReaderContract.FeedReaderDbHelper dbHelper, String title){
-        SQLiteDatabase db = dbHelper.getReadableDatabase();
-
-        // Define a projection that specifies which columns from the database
-        // you will actually use after this query.
-        String[] projection = {
-                BaseColumns._ID,
-                FeedReaderContract.FeedEntry.COLUMN_NAME_TITLE,
-                FeedReaderContract.FeedEntry.COLUMN_NAME_DOC2VEC,
-                FeedReaderContract.FeedEntry.COLUMN_NAME_GENRE,
-                FeedReaderContract.FeedEntry.COLUMN_NAME_ACTOR,
-                FeedReaderContract.FeedEntry.COLUMN_NAME_RELEASE_DATE,
-                FeedReaderContract.FeedEntry.COLUMN_NAME_IMAGE,
-                FeedReaderContract.FeedEntry.COLUMN_NAME_RATING
-        };
-
-        // Filter results WHERE "title" = 'My Title'
-        String selection = FeedReaderContract.FeedEntry.COLUMN_NAME_TITLE + " = ?";
-        String[] selectionArgs = { title };
-
-        // How you want the results sorted in the resulting Cursor
-        String sortOrder =
-                FeedReaderContract.FeedEntry.COLUMN_NAME_RELEASE_DATE + " DESC";
-
-        Cursor cursor = db.query(
-                FeedReaderContract.FeedEntry.TABLE_NAME,   // The table to query
-                projection,             // The array of columns to return (pass null to get all)
-                selection,              // The columns for the WHERE clause
-                selectionArgs,          // The values for the WHERE clause
-                null,                   // don't group the rows
-                null,                   // don't filter by row groups
-                sortOrder               // The sort order
-        );
-
-        return cursor;
-    }
-
-    public int UpdateDB(FeedReaderContract.FeedReaderDbHelper dbHelper, String title, int rating){
-        SQLiteDatabase db = dbHelper.getWritableDatabase();
-
-        // New value for one column
-        ContentValues values = new ContentValues();
-        values.put(FeedReaderContract.FeedEntry.COLUMN_NAME_RATING, rating);
-
-        // Which row to update, based on the title
-        String selection = FeedReaderContract.FeedEntry.COLUMN_NAME_TITLE + " LIKE ?";
-        String[] selectionArgs = { title };
-
-        int count = db.update(
-                FeedReaderContract.FeedEntry.TABLE_NAME,
-                values,
-                selection,
-                selectionArgs);
-
-        return count;
     }
 
     private class AsyncTaskRunner extends AsyncTask<Double, Integer, INDArray> {
@@ -469,7 +394,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    public class MovieData {
+    public static class MovieData {
         private String title;
         private String doc2vec;
         private String genre;
@@ -478,6 +403,7 @@ public class MainActivity extends AppCompatActivity {
         private String image;
         private String plot;
         private int id;
+        private float rating;
 
         MovieData(String title, String plot, int releaseDate, String image, String actor, String genre, int id){
             this.title = title;
@@ -487,6 +413,26 @@ public class MainActivity extends AppCompatActivity {
             this.actor = actor;
             this.genre = genre;
             this.id = id;
+        }
+
+        MovieData(String title, String plot, int releaseDate, String image, String actor, String genre){
+            this.title = title;
+            this.plot = plot;
+            this.releaseDate = releaseDate;
+            this.image = image;
+            this.actor = actor;
+            this.genre = genre;
+            this.rating = 0;
+        }
+
+        MovieData(String title, String plot, int releaseDate, String image, String actor, String genre, float rating){
+            this.title = title;
+            this.plot = plot;
+            this.releaseDate = releaseDate;
+            this.image = image;
+            this.actor = actor;
+            this.genre = genre;
+            this.rating = rating;
         }
 
         public String getTitle() {
@@ -617,25 +563,76 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void VolleyGetDB(){
-        url = url + "api/all_films/0";
+        String urlGet = url + "api/all_films/0";
         JsonArrayRequest jsonArrayRequest = new JsonArrayRequest
-                (Request.Method.GET, url, null, new Response.Listener<JSONArray>() {
+                (Request.Method.GET, urlGet, null, new Response.Listener<JSONArray>() {
 
                     @Override
                     public void onResponse(JSONArray response) {
-                        Log.i("Volley", "Response: " + response.toString());
+                        //Handle incoming data
+
+                        try {
+                            maxBatches = response.getJSONObject(0).getInt("max_batch_num");
+                            Log.i("Volley", String.valueOf(maxBatches));
+                            for(int i = 1; i <= maxBatches; i++){
+                                VolleyGetDB(i);
+                            }
+                            ArrayList<MovieData> movies = new ArrayList<>();
+                            for(int i = 1; i<response.length(); i++){
+                                movies.add(jsonAdapterMovie(response.getJSONObject(i)));
+                            }
+                            long linesAdded = dbHelper.fillDB(dbHelper, movies);
+                            Movies = dbHelper.ReadFromDB(dbHelper);
+                            Log.i("Layout", String.valueOf(Movies.size()));
+                            fillMovieLayout(Movies.get(0));
+                            Movies.remove(0);
+                            Log.i("Volley", String.valueOf(linesAdded) + " lines added");
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                        }
                     }
                 }, new Response.ErrorListener() {
 
                     @Override
                     public void onErrorResponse(VolleyError error) {
-                        // TODO: Handle error
                         Log.e("Volley", "Fehler in Get request");
                         Log.e("Volley", error.toString());
                     }
                 });
 
-        // Access the RequestQueue through your singleton class.
+        queue.add(jsonArrayRequest);
+
+    }
+
+    public void VolleyGetDB(int batchNum){
+        String urlGet = url + "api/all_films/" + batchNum;
+        JsonArrayRequest jsonArrayRequest = new JsonArrayRequest
+                (Request.Method.GET, urlGet, null, new Response.Listener<JSONArray>() {
+
+                    @Override
+                    public void onResponse(JSONArray response) {
+                        Log.i("Volley", "Response: " + response.toString());
+                        //Handle incoming data
+                        ArrayList<MovieData> movies = new ArrayList<>();
+                        for(int i = 1; i<response.length(); i++){
+                            try {
+                                movies.add(jsonAdapterMovie(response.getJSONObject(i)));
+                            } catch (JSONException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                        long linesAdded = dbHelper.fillDB(dbHelper, movies);
+                        Log.i("Volley", String.valueOf(linesAdded) + " lines added");
+                    }
+                }, new Response.ErrorListener() {
+
+                    @Override
+                    public void onErrorResponse(VolleyError error) {
+                        Log.e("Volley", "Fehler in Get request");
+                        Log.e("Volley", error.toString());
+                    }
+                });
+
         queue.add(jsonArrayRequest);
 
     }
@@ -675,9 +672,6 @@ public class MainActivity extends AppCompatActivity {
                     Log.e("Volley", "Im onErrorResponse");
                 }
             });
-
-            // Add the realibility on the connection.
-            req.setRetryPolicy(new DefaultRetryPolicy(10000, 1, 1.0f));
 
             queue.add(req);
         } catch (JSONException e) {
@@ -789,6 +783,32 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
         } catch (JSONException e) {
         } catch (UnsupportedEncodingException errorr) {
+        }
+    }
+
+    public MovieData jsonAdapterMovie(JSONObject movie){
+        String title = null;
+        try {
+            title = movie.getString("title");
+            int release_year = movie.getInt("release_year");
+            String actor = "";
+            JSONArray actors = movie.getJSONArray("actors");
+            for(int i = 0; i<actors.length(); i++){
+                actor = actor + "," + actors.getString(i);
+            }
+            String genre = "";
+            JSONArray genres = movie.getJSONArray("genres");
+            for(int i = 0; i<genres.length(); i++){
+                genre = genre + "," + genres.getString(i);
+            }
+            String plot = movie.getString("plot");
+            String image = movie.getString("image_link");
+
+            return new MovieData(title, plot, release_year, image, actor, genre);
+        } catch (JSONException e) {
+            Log.i("Volley", "Fehler beim JSON parsen");
+            e.printStackTrace();
+            return null;
         }
     }
 }
