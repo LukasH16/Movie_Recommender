@@ -1,6 +1,9 @@
 package de.hsos.ma.ma_project;
 
 import android.app.Activity;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.os.AsyncTask;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -11,45 +14,21 @@ import android.widget.ImageView;
 import android.widget.RatingBar;
 import android.widget.TextView;
 
+import java.io.InputStream;
+
 public class MovieListAdapter extends ArrayAdapter {
     //to reference the Activity
     private final Activity context;
 
-    //to store the animal images
-    private final Integer[] imageIDarray;
+    private final MainActivity.MovieData[] movieArray;
 
-    //to store the animal images
-    private final Integer[] idArray;
 
-    //to store the list of countries
-    private final String[] titelArray;
+    public MovieListAdapter(Activity context, MainActivity.MovieData[] movieParam){
 
-    //to store the list of countries
-    private final String[] genreArray;
-
-    //to store the list of countries
-    private final String[] actorArray;
-
-    //to store the list of countries
-    private final String[] releaseDateArray;
-
-    //to store the list of countries
-    private final String[] plotArray;
-
-    public MovieListAdapter(Activity context, String[] titelArrayParam, String[] genreArrayParam,
-                             Integer[] imageIDArrayParam, String[] actorArrayParam,
-                             String[] plotArrayParam, String[] releaseDateArrayParam, Integer[] idArray){
-
-        super(context,R.layout.movie_layout , titelArrayParam);
+        super(context,R.layout.movie_layout , movieParam);
 
         this.context=context;
-        this.imageIDarray = imageIDArrayParam;
-        this.titelArray = titelArrayParam;
-        this.genreArray = genreArrayParam;
-        this.actorArray = actorArrayParam;
-        this.plotArray = plotArrayParam;
-        this.releaseDateArray = releaseDateArrayParam;
-        this.idArray = idArray;
+        this.movieArray = movieParam;
 
     }
 
@@ -69,20 +48,20 @@ public class MovieListAdapter extends ArrayAdapter {
         RatingBar ratingBar = (RatingBar) rowView.findViewById(R.id.ratingBar);
 
         //this code sets the values of the objects to values from the arrays
-        titelTextField.setText(titelArray[position]);
-        genreTextField.setText(genreArray[position]);
-        actorTextField.setText(actorArray[position]);
-        plotTextField.setText(plotArray[position]);
-        releaseDateTextField.setText(releaseDateArray[position]);
-        idTextField.setText(String.valueOf(idArray[position]));
-        imageView.setImageResource(imageIDarray[position]);
+        titelTextField.setText(movieArray[position].getTitle());
+        genreTextField.setText(movieArray[position].getGenre());
+        actorTextField.setText(movieArray[position].getActor());
+        plotTextField.setText(movieArray[position].getPlot());
+        releaseDateTextField.setText(String.valueOf(movieArray[position].getReleaseDate()));
+        //TODO: Id einfügen
+        idTextField.setText(String.valueOf(movieArray[position]));
+        new DownloadImageTask(imageView).execute("https:" + movieArray[position].getImage());
 
         btnSubmit.setOnClickListener(new View.OnClickListener(){
             @Override
             public void onClick(View view) {
-                //DB updaten
-                //Post senden
-                Log.i("Listview", "Hier im Button " + titelArray[position]);
+                //TODO:DB updaten + Post senden
+                Log.i("Listview", "Hier im Button " + movieArray[position].getTitle());
                 Log.i("Listview", "Rating: " + String.valueOf((ratingBar.getRating() - 1) / 4));
             }
         });
@@ -90,4 +69,30 @@ public class MovieListAdapter extends ArrayAdapter {
         return rowView;
 
     };
+
+    public class DownloadImageTask extends AsyncTask<String, Void, Bitmap> {
+        ImageView bmImage;
+
+        public DownloadImageTask(ImageView bmImage) {
+            this.bmImage = bmImage;
+        }
+
+        protected Bitmap doInBackground(String... urls) {
+            String urldisplay = urls[0];
+            Bitmap mIcon11 = null;
+            try {
+                InputStream in = new java.net.URL(urldisplay).openStream();
+                mIcon11 = BitmapFactory.decodeStream(in);
+            } catch (Exception e) {
+                Log.e("Error", e.getMessage());
+                e.printStackTrace();
+            }
+            return mIcon11;
+        }
+
+        protected void onPostExecute(Bitmap result) {
+            bmImage.setImageBitmap(result);
+        }
+    }
+
 }

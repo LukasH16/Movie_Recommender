@@ -6,6 +6,7 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.provider.BaseColumns;
+import android.widget.ListView;
 
 import java.lang.reflect.Array;
 import java.util.ArrayList;
@@ -106,7 +107,7 @@ public final class FeedReaderContract {
                     FeedEntry.COLUMN_NAME_PLOT
             };
 
-            Cursor cursor = db.rawQuery("select * from MovieData Order By RANDOM() LIMIT 10", null);
+            Cursor cursor = db.rawQuery("select * from MovieData Order By RANDOM() LIMIT 1", null);
 
             ArrayList<MainActivity.MovieData> movies = new ArrayList<>();
             while(cursor.moveToNext()) {
@@ -144,6 +145,43 @@ public final class FeedReaderContract {
 
             return count;
         }
+
+        public MainActivity.MovieData getMovieFromTitle(FeedReaderContract.FeedReaderDbHelper dbHelper, String title){
+            SQLiteDatabase db = dbHelper.getReadableDatabase();
+
+            // Define a projection that specifies which columns from the database
+            // you will actually use after this query.
+            String[] projection = {
+                    BaseColumns._ID,
+                    FeedEntry.COLUMN_NAME_TITLE,
+                    FeedEntry.COLUMN_NAME_GENRE,
+                    FeedEntry.COLUMN_NAME_ACTOR,
+                    FeedEntry.COLUMN_NAME_RELEASE_DATE,
+                    FeedEntry.COLUMN_NAME_IMAGE,
+                    FeedEntry.COLUMN_NAME_RATING,
+                    FeedEntry.COLUMN_NAME_PLOT
+            };
+
+            Cursor cursor = db.rawQuery("select * from MovieData Where title = '" + title + "'", null);
+
+            MainActivity.MovieData movie = new MainActivity.MovieData(title, "plot", 0, "https://img.icons8.com/officel/80/000000/movie.png", "actor", "genre", 0);;
+
+            while(cursor.moveToNext()) {
+                String newTitle = cursor.getString(cursor.getColumnIndexOrThrow(FeedEntry.COLUMN_NAME_TITLE));
+                String genre = cursor.getString(cursor.getColumnIndexOrThrow(FeedEntry.COLUMN_NAME_GENRE));
+                String actor = cursor.getString(cursor.getColumnIndexOrThrow(FeedEntry.COLUMN_NAME_ACTOR));
+                int release_date = cursor.getInt(cursor.getColumnIndexOrThrow(FeedEntry.COLUMN_NAME_RELEASE_DATE));
+                String image = cursor.getString(cursor.getColumnIndexOrThrow(FeedEntry.COLUMN_NAME_IMAGE));
+                float rating = cursor.getFloat(cursor.getColumnIndexOrThrow(FeedEntry.COLUMN_NAME_RATING));
+                String plot = cursor.getString(cursor.getColumnIndexOrThrow(FeedEntry.COLUMN_NAME_PLOT));
+
+                movie = new MainActivity.MovieData(title, plot, release_date, image, actor, genre, rating);
+            }
+            cursor.close();
+
+            return movie;
+        }
+
     }
 
 }

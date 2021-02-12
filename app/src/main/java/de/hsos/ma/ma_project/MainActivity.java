@@ -5,6 +5,7 @@ import androidx.constraintlayout.widget.ConstraintLayout;
 
 import android.content.ContentValues;
 import android.database.Cursor;
+import android.database.DatabaseUtils;
 import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Bitmap;
@@ -74,8 +75,14 @@ import java.net.MalformedURLException;
 import java.net.ProtocolException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.StringTokenizer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -99,6 +106,7 @@ public class MainActivity extends AppCompatActivity {
     private SQLiteDatabase mDb;
     private RequestQueue queue;
     private ArrayList<MovieData> Movies;
+    private MovieData[] RecommendedMovies = new MovieData[10];
     private ArrayList<String> Actors;
     private ArrayList<String> Genres;
     private int maxBatches = 5;
@@ -108,27 +116,6 @@ public class MainActivity extends AppCompatActivity {
     //192.168.178.32
     String url ="http://192.168.188.35:8000/";
 
-    //Dummy Data
-    String[] titelArray = {"Octopus","Pig","Sheep","Rabbit","Snake","Spider" };
-
-    String[] genreArray = {
-            "8 tentacled monster",
-            "Delicious in rolls",
-            "Great for jumpers",
-            "Nice in a stew",
-            "Great for shoes",
-            "Scary."
-    };
-
-    Integer[] imageArray = {R.drawable.movie_image_placeholder,
-            R.drawable.movie_image_placeholder,
-            R.drawable.movie_image_placeholder,
-            R.drawable.movie_image_placeholder,
-            R.drawable.movie_image_placeholder,
-            R.drawable.movie_image_placeholder};
-
-    Integer[] idArray = {1,2,3,4,5,6};
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -136,9 +123,15 @@ public class MainActivity extends AppCompatActivity {
 
         movieRateLayout = findViewById(R.id.movieRateLayout);
 
-        MovieListAdapter whatever = new MovieListAdapter(this, titelArray, genreArray, imageArray, titelArray, genreArray, titelArray, idArray);
+        for(int i = 1; i < RecommendedMovies.length; i++){
+            RecommendedMovies[i] = new MovieData("title", "plot", 2000, "//img.icons8.com/officel/80/000000/movie.png", "actor", "genre", 0.0, 1);
+        }
+
+        MovieListAdapter whatever = new MovieListAdapter(this, RecommendedMovies);
         listView = (ListView) findViewById(R.id.recommendationList);
         listView.setAdapter(whatever);
+
+        Log.i("Listview", "Hier zum ersten mal gesetzt");
 
         bar = (ProgressBar) findViewById(R.id.progressBar);
         ratingTitle = (TextView) findViewById(R.id.movie_titel);
@@ -204,8 +197,18 @@ public class MainActivity extends AppCompatActivity {
                     bar.setVisibility(View.GONE);
                 }else{
                     movieRateLayout.setVisibility(View.GONE);
-                    listView.setVisibility(View.VISIBLE);
-                    bar.setVisibility(View.GONE);
+                    AsyncTaskRunner runner = new AsyncTaskRunner();
+
+                    final double pl = 1;
+                    final double pw = 1;
+                    final double sl = 1;
+                    final double sw = 1;
+
+                    //pass the measurement as params to the AsyncTask
+                    runner.execute(pl,pw,sl,sw);
+
+                    //listView.setVisibility(View.VISIBLE);
+                    bar.setVisibility(View.VISIBLE);
                 }
             }
 
@@ -256,6 +259,10 @@ public class MainActivity extends AppCompatActivity {
 
     private class AsyncTaskRunner extends AsyncTask<Double, Integer, INDArray> {
 
+        int[] movieIds;
+        String[] titlesSorted;
+        ArrayList<MovieData> moviesSorted;
+
         // Runs in UI before background thread is called
         @Override
         protected void onPreExecute() {
@@ -264,87 +271,95 @@ public class MainActivity extends AppCompatActivity {
             bar.setVisibility(View.INVISIBLE);
         }
 
+        public double[] getOneHot(String genre, int release_date){
+            double[] oneHot = new double[Genres.size() + 1];
+            for (int i = 0, len = oneHot.length; i < len; i++) oneHot[i] = 0;
+
+            StringTokenizer strToken  = new StringTokenizer(genre, ",");
+
+            while (strToken.hasMoreTokens()) {
+                oneHot[Genres.indexOf(strToken.nextToken())] = 1;
+            }
+            oneHot[oneHot.length - 1] = ((double)release_date  - 1900) / 150;
+            return oneHot;
+        }
+
         // This is our main background thread for the neural net
         @Override
         protected INDArray doInBackground(Double... params) {
-            //TODO:Wir haben eigentlich keinen gesonderten User Input
+            SQLiteDatabase db = dbHelper.getReadableDatabase();
+            long count = DatabaseUtils.queryNumEntries(db, FeedReaderContract.FeedEntry.TABLE_NAME);
+            db.close();
 
-            //Get the value from params, which is an array so they will be 0,1,2,3
-            /*
-            double pld = params[0];
-            double pwd = params[1];
-            double sld = params[2];
-            double swd = params[3];
+            double[][] training_in = new double[(int) count][Genres.size() + 1];
+            double[] training_out = new double[(int) count];
+            movieIds = new int[(int) count];
+            titlesSorted = new String[(int) count];
+            moviesSorted = new ArrayList<>();
+            //parameter = dbHelper.GetNNPrams(dbHelper, parameter);
+            db = dbHelper.getReadableDatabase();
 
-            //Create input INDArray for the user Input
-            INDArray actualInput = Nd4j.zeros(1,4);
-            actualInput.putScalar(new int[]{0,0}, pld);
-            actualInput.putScalar(new int[]{0,1}, pwd);
-            actualInput.putScalar(new int[]{0,2}, sld);
-            actualInput.putScalar(new int[]{0,3}, swd);
-             */
+            String[] projection = {
+                    BaseColumns._ID,
+                    FeedReaderContract.FeedEntry.COLUMN_NAME_TITLE,
+                    FeedReaderContract.FeedEntry.COLUMN_NAME_GENRE,
+                    FeedReaderContract.FeedEntry.COLUMN_NAME_ACTOR,
+                    FeedReaderContract.FeedEntry.COLUMN_NAME_RELEASE_DATE,
+                    FeedReaderContract.FeedEntry.COLUMN_NAME_RATING,
+            };
 
-            //TODO:Alle Daten aus der DB in Matrix überführen
+            Cursor cursor = db.rawQuery("Select * from " + FeedReaderContract.FeedEntry.TABLE_NAME, null);
 
-            //Convert the iris data into 150x4 matrix
-            /*
-            int row=150;
-            int col=4;
-            double[][] irisMatrix=new double[row][col];
             int i = 0;
-            for(int r=0; r<row; r++){
-                for( int c=0; c<col; c++){
-                    irisMatrix[r][c]=com.example.jmerwin.irisclassifier.DataSet.irisData[i++];
-                }
+            while(cursor.moveToNext()) {
+                int id = cursor.getInt(cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry._ID));
+                String title = cursor.getString(cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry.COLUMN_NAME_TITLE));
+                String genre = cursor.getString(cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry.COLUMN_NAME_GENRE));
+                String actor = cursor.getString(cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry.COLUMN_NAME_ACTOR));
+                int release_date = cursor.getInt(cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry.COLUMN_NAME_RELEASE_DATE));
+                float rating = cursor.getFloat(cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry.COLUMN_NAME_RATING));
+
+                double [] oneHot = getOneHot(genre, release_date);
+                training_in[i] = oneHot;
+                training_out[i] = rating;
+                movieIds[i] = id;
+                titlesSorted[i] = title;
+
+                i++;
             }
-            */
+            cursor.close();
 
-            //TODO:Alle Label Daten in Matrix überführen
-
-            //Now do the same for the label data
-            /*
-            int rowLabel=150;
-            int colLabel=3;
-            double[][] twodimLabel=new double[rowLabel][colLabel];
-            int ii = 0;
-            for(int r=0; r<rowLabel; r++){
-                for( int c=0; c<colLabel; c++){
-                    twodimLabel[r][c]=com.example.jmerwin.irisclassifier.DataSet.labelData[ii++];
-                }
-            }
-            */
-
-            //TODO:Matrixen in INDArrays umformen
             //Converting the data matrices into training INDArrays is straight forward
-            /*
-            INDArray trainingIn = Nd4j.create(irisMatrix);
-            INDArray trainingOut = Nd4j.create(twodimLabel);
-             */
+            INDArray trainingIn = Nd4j.create(training_in);
+            INDArray trainingOut = Nd4j.create(training_out, new int[]{training_out.length,1});
+            Log.i("INDArrayIn", trainingIn.toString());
+            Log.i("INDArrayOut", trainingOut.toString());
 
             //define the layers of the network
+
             DenseLayer inputLayer = new DenseLayer.Builder()
-                    .nIn(4)
-                    .nOut(3)
+                    .nIn(Genres.size() + 1)
+                    .nOut(32)
                     .name("Input")
                     .build();
 
             DenseLayer hiddenLayer = new DenseLayer.Builder()
-                    .nIn(3)
-                    .nOut(3)
+                    .nIn(32)
+                    .nOut(16)
                     .name("Hidden")
                     .build();
 
-            OutputLayer outputLayer = new OutputLayer.Builder(LossFunctions.LossFunction.NEGATIVELOGLIKELIHOOD)
-                    .nIn(3)
-                    .nOut(10)
+            OutputLayer outputLayer = new OutputLayer.Builder(LossFunctions.LossFunction.MEAN_SQUARED_LOGARITHMIC_ERROR)
+                    .nIn(16)
+                    .nOut(1)
                     .name("Output")
-                    .activation(Activation.SOFTMAX)
+                    .activation(Activation.SIGMOID)
                     .build();
 
             NeuralNetConfiguration.Builder nncBuilder = new NeuralNetConfiguration.Builder();
             long seed = 6;
             nncBuilder.seed(seed);
-            nncBuilder.activation(Activation.TANH);
+            nncBuilder.activation(Activation.RELU);
             nncBuilder.weightInit(WeightInit.XAVIER);
 
             NeuralNetConfiguration.ListBuilder listBuilder = nncBuilder.list();
@@ -355,37 +370,50 @@ public class MainActivity extends AppCompatActivity {
             MultiLayerNetwork myNetwork = new MultiLayerNetwork(listBuilder.build());
             myNetwork.init();
 
-            //TODO:Netzwerk trainieren
-            /*
             //Create a data set from the INDArrays and train the network
-            DataSet myData = new DataSet(trainingIn, trainingOut);
-            for(int l=0; l<=1000; l++) {
-                myNetwork.fit(myData);
+            for(int l=0; l<=100; l++) {
+                myNetwork.fit(trainingIn, trainingOut);
+                Log.i("NN", "Epoch" + String.valueOf(l));
             }
-             */
 
-            /*
-            //TODO:Weiß nicht ob wir gesondert evaluieren müssen
             //Evaluate the input data against the model
-            INDArray actualOutput = myNetwork.output(actualInput);
+            INDArray actualOutput = myNetwork.output(trainingIn);
             Log.d("myNetwork Output ", actualOutput.toString());
 
             //Here we return the INDArray to onPostExecute where it can be
             //used to update the UI
             return actualOutput;
-             */
-            //TODO: Richtigen output zurückgeben
-            return null;
         }
 
         //This is where we update the UI with our classification results
         @Override
         protected void onPostExecute(INDArray result) {
             super.onPostExecute(result);
+            double [] resultArray = result.toDoubleVector();
+            //for (int i = 0, len = resultArray.length; i < len; i++)Log.i("Output Array " + String.valueOf(i) , String.valueOf(resultArray[i]));
+            Log.i("Output Array Result" , String.valueOf(resultArray.length));
+            Log.i("Output Array Title" , String.valueOf(movieIds.length));
+            for (int i = 0, len = resultArray.length; i < len; i++)moviesSorted.add(new MovieData(titlesSorted[i], resultArray[i]));
+
+            Collections.sort(moviesSorted, new sortByRating());
+            for (int i = 0, len = resultArray.length; i < len; i++)Log.i("Movie Array " + String.valueOf(i) , String.valueOf(moviesSorted.get(i).rating));
+
+            String[] titlesTop = new String[10];
+            for(int i = 0; i < 10; i++){
+                titlesTop[i] = moviesSorted.get(i).title;
+            }
+            MovieData[] topMovies = new MovieData[10];
+            for(int i = 0; i < titlesTop.length; i++){
+                topMovies[i] = dbHelper.getMovieFromTitle(dbHelper, titlesTop[i]);
+            }
+
+            MovieListAdapter whatever = new MovieListAdapter(MainActivity.this, topMovies);
+            listView = (ListView) findViewById(R.id.recommendationList);
+            listView.setAdapter(whatever);
 
             //Hide the progress bar now that we are finished
-            //ProgressBar bar = (ProgressBar) findViewById(R.id.progressBar);
-            //bar.setVisibility(View.INVISIBLE);
+            listView.setVisibility(View.VISIBLE);
+            bar.setVisibility(View.INVISIBLE);
 
             //Retrieve the results
 
@@ -409,7 +437,7 @@ public class MainActivity extends AppCompatActivity {
         private String image;
         private String plot;
         private int id;
-        private float rating;
+        private double rating;
 
         MovieData(String title, String plot, int releaseDate, String image, String actor, String genre, int id){
             this.title = title;
@@ -431,13 +459,28 @@ public class MainActivity extends AppCompatActivity {
             this.rating = 0;
         }
 
-        MovieData(String title, String plot, int releaseDate, String image, String actor, String genre, float rating){
+        MovieData(String title, String plot, int releaseDate, String image, String actor, String genre, double rating){
             this.title = title;
             this.plot = plot;
             this.releaseDate = releaseDate;
             this.image = image;
             this.actor = actor;
             this.genre = genre;
+            this.rating = rating;
+        }
+
+        MovieData(String title, String plot, int releaseDate, String image, String actor, String genre, double rating, int id){
+            this.title = title;
+            this.plot = plot;
+            this.releaseDate = releaseDate;
+            this.image = image;
+            this.actor = actor;
+            this.genre = genre;
+            this.rating = rating;
+        }
+
+        MovieData(String title, double rating){
+            this.title = title;
             this.rating = rating;
         }
 
@@ -707,7 +750,6 @@ public class MainActivity extends AppCompatActivity {
 
     public void VolleyPostUpdate(String title, int year, String username, float rating){
         try {
-            //TODO: Irgendwie den Server erreichen
             String URL = url + "api/post_rating";
             Log.i("Post", URL);
             JSONObject jsonBody = new JSONObject();
@@ -862,7 +904,12 @@ public class MainActivity extends AppCompatActivity {
             String actor = "";
             JSONArray actors = movie.getJSONArray("actors");
             for(int i = 0; i<actors.length(); i++){
-                actor = actor + "," + actors.getString(i);
+                if(i == actors.length() - 1){
+                    actor = actor + actors.getString(i);
+                }else{
+                    actor = actor + actors.getString(i) + ",";
+                }
+
             }
             String genre = "";
             JSONArray genres = movie.getJSONArray("genres");
@@ -877,6 +924,17 @@ public class MainActivity extends AppCompatActivity {
             Log.i("Volley", "Fehler beim JSON parsen");
             e.printStackTrace();
             return null;
+        }
+    }
+
+    public class sortByRating implements Comparator<MovieData> {
+        // Used for sorting in ascending order of
+        // roll number
+        public int compare(MovieData a, MovieData b)
+        {
+            if (a.rating > b.rating) return -1;
+            if (a.rating < b.rating) return 1;
+            return 0;
         }
     }
 }
