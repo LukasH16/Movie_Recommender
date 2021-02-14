@@ -107,7 +107,7 @@ public final class FeedReaderContract {
                     FeedEntry.COLUMN_NAME_PLOT
             };
 
-            Cursor cursor = db.rawQuery("select * from MovieData Order By RANDOM() LIMIT 1", null);
+            Cursor cursor = db.rawQuery("select * from MovieData Order By RANDOM() LIMIT 10", null);
 
             ArrayList<MainActivity.MovieData> movies = new ArrayList<>();
             while(cursor.moveToNext()) {

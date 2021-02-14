@@ -4,6 +4,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.constraintlayout.widget.ConstraintLayout;
 
 import android.content.ContentValues;
+import android.content.Context;
 import android.database.Cursor;
 import android.database.DatabaseUtils;
 import android.database.SQLException;
@@ -80,6 +81,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.StringTokenizer;
@@ -87,7 +89,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class MainActivity extends AppCompatActivity {
-    int counterForInit = 0;
     private TextView ratingTitle;
     private TextView ratingGenre;
     private TextView ratingActor;
@@ -102,19 +103,19 @@ public class MainActivity extends AppCompatActivity {
     private ProgressBar bar;
     boolean online = false;
     private FeedReaderContract.FeedReaderDbHelper dbHelper;
-    private DatabaseHelper mDBHelper;
     private SQLiteDatabase mDb;
-    private RequestQueue queue;
+    private static RequestQueue queue;
     private ArrayList<MovieData> Movies;
     private MovieData[] RecommendedMovies = new MovieData[10];
     private ArrayList<String> Actors;
     private ArrayList<String> Genres;
     private int maxBatches = 5;
+    public static Context context;
 
     //https://stackoverflow.com/questions/39058638/android-volley-noconnectionerror
     //192.168.188.35
     //192.168.178.32
-    String url ="http://192.168.188.35:8000/";
+    private static String url ="http://192.168.188.35:8000/";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -124,7 +125,9 @@ public class MainActivity extends AppCompatActivity {
         movieRateLayout = findViewById(R.id.movieRateLayout);
 
         for(int i = 1; i < RecommendedMovies.length; i++){
-            RecommendedMovies[i] = new MovieData("title", "plot", 2000, "//img.icons8.com/officel/80/000000/movie.png", "actor", "genre", 0.0, 1);
+            RecommendedMovies[i] = new MovieData("title", "plot",
+                    2000, "//img.icons8.com/officel/80/000000/movie.png",
+                    "actor", "genre", 0.0, 1);
         }
 
         MovieListAdapter whatever = new MovieListAdapter(this, RecommendedMovies);
@@ -155,6 +158,8 @@ public class MainActivity extends AppCompatActivity {
         VolleyGetGenres();
 
         addListenerOnRatingButton();
+
+        MainActivity.context = getApplicationContext();
     }
 
     @Override
@@ -225,31 +230,11 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
-
-        if (id == R.id.online_offline) {
-            if(online){
-                online = false;
-                //Asnyc Funktion losschicken
-                AsyncTaskRunner runner = new AsyncTaskRunner();
-
-                //pass the measurement as params to the AsyncTask
-                //Hier müssen evtl. die Inputs übergeben werden
-                runner.execute();
-
-                bar.setVisibility(View.VISIBLE);
-            }else{
-                online = true;
-
-                //Server-Request losschicken
-                AsyncTaskRunnerPost postReq = new AsyncTaskRunnerPost();
-                postReq.execute("start");
-            }
-        }
         if (id == R.id.retry_favorites) {
-            //TODO:10 neue Filme aus der DB ziehen
-            //ReadFromDB(dbHelper, null);
-            //TODO:Die Imagebuttons füllen
-            counterForInit = 0;
+            Movies = dbHelper.ReadFromDB(dbHelper);
+            Log.i("Layout", String.valueOf(Movies.size()));
+            fillMovieLayout(Movies.get(0));
+            Movies.remove(0);
             movieRateLayout.setVisibility(View.VISIBLE);
             listView.setVisibility(View.GONE);
         }
@@ -541,51 +526,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private class AsyncTaskRunnerPost extends AsyncTask<String,String,String>{
-        @Override
-        protected String doInBackground(String... params) {
-            try {
-                String url="Unsere URL";
-                URL object=new URL(url);
-
-                HttpURLConnection con = (HttpURLConnection) object.openConnection();
-                con.setDoOutput(true);
-                con.setDoInput(true);
-                con.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-                con.setRequestMethod("POST");
-
-                JSONObject cred = new JSONObject();
-                //TODO: Json befüllen
-
-                DataOutputStream localDataOutputStream = new DataOutputStream(con.getOutputStream());
-                localDataOutputStream.writeBytes(cred.toString());
-                localDataOutputStream.flush();
-                localDataOutputStream.close();
-
-
-            }
-            catch (Exception e){
-                Log.v("ErrorAPP",e.toString());
-            }
-            return "";
-        }
-
-        @Override
-        protected void onPostExecute(String s) {
-            super.onPostExecute(s);
-        }
-
-        @Override
-        protected void onPreExecute() {
-            super.onPreExecute();
-        }
-
-        @Override
-        protected void onProgressUpdate(String... values) {
-            super.onProgressUpdate(values);
-        }
-    }
-
     private class DownloadImageTask extends AsyncTask<String, Void, Bitmap> {
         ImageView bmImage;
 
@@ -696,7 +636,7 @@ public class MainActivity extends AppCompatActivity {
                             Log.i("Layout", String.valueOf(Movies.size()));
                             fillMovieLayout(Movies.get(0));
                             Movies.remove(0);
-                            Log.i("Volley", response.toString());
+                            //Log.i("Volley", response.toString());
                             Log.i("Volley", String.valueOf(linesAdded) + " lines added");
                         } catch (JSONException e) {
                             e.printStackTrace();
@@ -722,17 +662,27 @@ public class MainActivity extends AppCompatActivity {
 
                     @Override
                     public void onResponse(JSONArray response) {
-                        Log.i("Volley", "Response: " + response.toString());
+                        //Log.i("Volley", "Response: " + response.toString());
                         //Handle incoming data
                         ArrayList<MovieData> movies = new ArrayList<>();
                         for(int i = 1; i<response.length(); i++){
                             try {
+                                maxBatches = response.getJSONObject(0).getInt("max_batch_num");
                                 movies.add(jsonAdapterMovie(response.getJSONObject(i)));
                             } catch (JSONException e) {
                                 e.printStackTrace();
                             }
                         }
                         long linesAdded = dbHelper.fillDB(dbHelper, movies);
+                        if((linesAdded / maxBatches) < 105 && (linesAdded / maxBatches) > 99){
+                            int movielength = Movies.size();
+                            Movies = dbHelper.ReadFromDB(dbHelper);
+                            Log.i("Layout", String.valueOf(Movies.size()));
+                            for(int i = Movies.size(); i > movielength; i--){
+                                Movies.remove(0);
+                            }
+                            Log.i("Layout", "Final Layout update");
+                        }
                         Log.i("Volley", String.valueOf(linesAdded) + " lines added");
                     }
                 }, new Response.ErrorListener() {
@@ -748,9 +698,9 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    public void VolleyPostUpdate(String title, int year, String username, float rating){
+    public static void VolleyPostUpdate(String title, int year, String username, float rating){
         try {
-            String URL = url + "api/post_rating";
+            String URL = MainActivity.url + "api/post_rating";
             Log.i("Post", URL);
             JSONObject jsonBody = new JSONObject();
             jsonBody.put("title", title);
@@ -854,45 +804,6 @@ public class MainActivity extends AppCompatActivity {
 
             // close the database
             mDb.close();
-        }
-    }
-
-    public void updateMovieRating(int movie_id, float rating, int user_id) {
-        try {
-            mDBHelper.updateDataBase();
-        } catch (IOException mIOException) {
-            throw new Error("UnableToUpdateDatabase");
-        }
-
-        try {
-            mDb = mDBHelper.getWritableDatabase();
-        } catch (SQLException mSQLException) {
-            throw mSQLException;
-        }
-
-        ContentValues contentValues = new ContentValues();
-        contentValues.put("film_id", movie_id);
-        contentValues.put("user_id", user_id);
-        contentValues.put("rating", rating);
-        if(this.mDb.update("api_rating", contentValues, "film_id = " + movie_id + " AND user_id = " + user_id, null) == 0){
-            Log.i("Rating", "Noch kein Rating vorhanden");
-            this.mDb.insert("api_rating", null, contentValues);
-        }
-
-        // close the database
-        mDb.close();
-    }
-
-    public void parseVolleyError(VolleyError error) {
-        try {
-            String responseBody = new String(error.networkResponse.data, "utf-8");
-            JSONObject data = new JSONObject(responseBody);
-            JSONArray errors = data.getJSONArray("errors");
-            JSONObject jsonMessage = errors.getJSONObject(0);
-            String message = jsonMessage.getString("message");
-            Toast.makeText(getApplicationContext(), message, Toast.LENGTH_LONG).show();
-        } catch (JSONException e) {
-        } catch (UnsupportedEncodingException errorr) {
         }
     }
 

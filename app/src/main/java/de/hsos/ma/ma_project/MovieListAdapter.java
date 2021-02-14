@@ -53,14 +53,20 @@ public class MovieListAdapter extends ArrayAdapter {
         actorTextField.setText(movieArray[position].getActor());
         plotTextField.setText(movieArray[position].getPlot());
         releaseDateTextField.setText(String.valueOf(movieArray[position].getReleaseDate()));
-        //TODO: Id einfügen
         idTextField.setText(String.valueOf(movieArray[position]));
         new DownloadImageTask(imageView).execute("https:" + movieArray[position].getImage());
 
         btnSubmit.setOnClickListener(new View.OnClickListener(){
             @Override
             public void onClick(View view) {
-                //TODO:DB updaten + Post senden
+                FeedReaderContract.FeedReaderDbHelper dbHelper = new FeedReaderContract.FeedReaderDbHelper(MainActivity.context);
+                float rating = ((ratingBar.getRating() - 1) / 4);
+                Log.i("Rating: ", String.valueOf((ratingBar.getRating() - 1) / 4));
+                //Daten in DB Updaten
+                int changedLines = dbHelper.UpdateDB(dbHelper, titelTextField.getText().toString(), rating);
+                Log.i("Update", String.valueOf(changedLines));
+                //Daten per Post an Server
+                MainActivity.VolleyPostUpdate(titelTextField.getText().toString(), Integer.valueOf(releaseDateTextField.getText().toString()), "Action", rating);
                 Log.i("Listview", "Hier im Button " + movieArray[position].getTitle());
                 Log.i("Listview", "Rating: " + String.valueOf((ratingBar.getRating() - 1) / 4));
             }
