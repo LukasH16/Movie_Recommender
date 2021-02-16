@@ -115,7 +115,7 @@ public class MainActivity extends AppCompatActivity {
     //https://stackoverflow.com/questions/39058638/android-volley-noconnectionerror
     //192.168.188.35
     //192.168.178.32
-    private static String url ="http://192.168.188.35:8000/";
+    private static String url ="http://192.168.178.30:8000/";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -256,14 +256,21 @@ public class MainActivity extends AppCompatActivity {
             bar.setVisibility(View.INVISIBLE);
         }
 
-        public double[] getOneHot(String genre, int release_date){
-            double[] oneHot = new double[Genres.size() + 1];
+        public double[] getOneHot(String genre, int release_date, String doc_vec){
+            double[] oneHot = new double[20 + Genres.size() + 1];
             for (int i = 0, len = oneHot.length; i < len; i++) oneHot[i] = 0;
 
-            StringTokenizer strToken  = new StringTokenizer(genre, ",");
+            StringTokenizer genreToken  = new StringTokenizer(genre, ",");
+            doc_vec = doc_vec.substring(1, doc_vec.length() - 1);
+            StringTokenizer doc_vecToken  = new StringTokenizer(doc_vec, ",");
+            int i = 0;
+            while (doc_vecToken.hasMoreTokens()) {
+                oneHot[i] = Double.parseDouble(doc_vecToken.nextToken());
+                i++;
+            }
 
-            while (strToken.hasMoreTokens()) {
-                oneHot[Genres.indexOf(strToken.nextToken())] = 1;
+            while (genreToken.hasMoreTokens()) {
+                oneHot[20 + Genres.indexOf(genreToken.nextToken())] = 1;
             }
             oneHot[oneHot.length - 1] = ((double)release_date  - 1900) / 150;
             return oneHot;
@@ -276,7 +283,7 @@ public class MainActivity extends AppCompatActivity {
             long count = DatabaseUtils.queryNumEntries(db, FeedReaderContract.FeedEntry.TABLE_NAME);
             db.close();
 
-            double[][] training_in = new double[(int) count][Genres.size() + 1];
+            double[][] training_in = new double[(int) count][20 + Genres.size() + 1];
             double[] training_out = new double[(int) count];
             movieIds = new int[(int) count];
             titlesSorted = new String[(int) count];
@@ -291,6 +298,7 @@ public class MainActivity extends AppCompatActivity {
                     FeedReaderContract.FeedEntry.COLUMN_NAME_ACTOR,
                     FeedReaderContract.FeedEntry.COLUMN_NAME_RELEASE_DATE,
                     FeedReaderContract.FeedEntry.COLUMN_NAME_RATING,
+                    FeedReaderContract.FeedEntry.COLUMN_NAME_DOC2VEC,
             };
 
             Cursor cursor = db.rawQuery("Select * from " + FeedReaderContract.FeedEntry.TABLE_NAME, null);
@@ -301,10 +309,11 @@ public class MainActivity extends AppCompatActivity {
                 String title = cursor.getString(cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry.COLUMN_NAME_TITLE));
                 String genre = cursor.getString(cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry.COLUMN_NAME_GENRE));
                 String actor = cursor.getString(cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry.COLUMN_NAME_ACTOR));
+                String doc_vec = cursor.getString(cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry.COLUMN_NAME_DOC2VEC));
                 int release_date = cursor.getInt(cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry.COLUMN_NAME_RELEASE_DATE));
                 float rating = cursor.getFloat(cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry.COLUMN_NAME_RATING));
 
-                double [] oneHot = getOneHot(genre, release_date);
+                double [] oneHot = getOneHot(genre, release_date, doc_vec);
                 training_in[i] = oneHot;
                 training_out[i] = rating;
                 movieIds[i] = id;
@@ -323,7 +332,7 @@ public class MainActivity extends AppCompatActivity {
             //define the layers of the network
 
             DenseLayer inputLayer = new DenseLayer.Builder()
-                    .nIn(Genres.size() + 1)
+                    .nIn(20 + Genres.size() + 1)
                     .nOut(32)
                     .name("Input")
                     .build();
@@ -434,7 +443,7 @@ public class MainActivity extends AppCompatActivity {
             this.id = id;
         }
 
-        MovieData(String title, String plot, int releaseDate, String image, String actor, String genre){
+        MovieData(String title, String plot, int releaseDate, String image, String actor, String genre, String doc_vec){
             this.title = title;
             this.plot = plot;
             this.releaseDate = releaseDate;
@@ -442,6 +451,7 @@ public class MainActivity extends AppCompatActivity {
             this.actor = actor;
             this.genre = genre;
             this.rating = 0;
+            this.doc2vec = doc_vec;
         }
 
         MovieData(String title, String plot, int releaseDate, String image, String actor, String genre, double rating){
@@ -636,7 +646,7 @@ public class MainActivity extends AppCompatActivity {
                             Log.i("Layout", String.valueOf(Movies.size()));
                             fillMovieLayout(Movies.get(0));
                             Movies.remove(0);
-                            //Log.i("Volley", response.toString());
+                            Log.i("Volley", response.toString());
                             Log.i("Volley", String.valueOf(linesAdded) + " lines added");
                         } catch (JSONException e) {
                             e.printStackTrace();
@@ -827,10 +837,18 @@ public class MainActivity extends AppCompatActivity {
             for(int i = 0; i<genres.length(); i++){
                 genre = genre + "," + genres.getString(i);
             }
+            String doc_vec = movie.getString("doc_vec");
+            /*
+            JSONArray dec_vecs = movie.getJSONArray("doc_vec");
+            for(int i = 0; i<dec_vecs.length(); i++){
+                doc_vec = doc_vec + "," + dec_vecs.getDouble(i);
+            }
+
+             */
             String plot = movie.getString("plot");
             String image = movie.getString("image_link");
 
-            return new MovieData(title, plot, release_year, image, actor, genre);
+            return new MovieData(title, plot, release_year, image, actor, genre, doc_vec);
         } catch (JSONException e) {
             Log.i("Volley", "Fehler beim JSON parsen");
             e.printStackTrace();

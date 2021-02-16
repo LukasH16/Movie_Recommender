@@ -84,6 +84,7 @@ public final class FeedReaderContract {
                 values.put(FeedEntry.COLUMN_NAME_ACTOR, movie.getActor());
                 values.put(FeedEntry.COLUMN_NAME_GENRE, movie.getGenre());
                 values.put(FeedEntry.COLUMN_NAME_PLOT, movie.getPlot());
+                values.put(FeedEntry.COLUMN_NAME_DOC2VEC, movie.getDoc2vec());
 
                 // Insert the new row, returning the primary key value of the new row
                 newRowId = db.insert(FeedEntry.TABLE_NAME, null, values);
@@ -162,7 +163,21 @@ public final class FeedReaderContract {
                     FeedEntry.COLUMN_NAME_PLOT
             };
 
-            Cursor cursor = db.rawQuery("select * from MovieData Where title = '" + title + "'", null);
+            // Filter results WHERE "title" = 'My Title'
+            String selection = FeedEntry.COLUMN_NAME_TITLE + " = ?";
+            String[] selectionArgs = { title };
+
+
+            Cursor cursor = db.query(
+                    FeedEntry.TABLE_NAME,   // The table to query
+                    projection,             // The array of columns to return (pass null to get all)
+                    selection,              // The columns for the WHERE clause
+                    selectionArgs,          // The values for the WHERE clause
+                    null,                   // don't group the rows
+                    null,                   // don't filter by row groups
+                    null               // The sort order
+            );
+
 
             MainActivity.MovieData movie = new MainActivity.MovieData(title, "plot", 0, "https://img.icons8.com/officel/80/000000/movie.png", "actor", "genre", 0);;
 
